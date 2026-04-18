@@ -31,30 +31,46 @@ interface VideoContent {
   link: string;
 }
 
+interface DocumentContent {
+  id: number;
+  title: string;
+  description: string;
+  filename: string;
+}
+
 export default function App() {
   const [isScrolled, setIsScrolled] = useState(false);
+  
+  // Video Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
   const [currentVideo, setCurrentVideo] = useState({ title: '', link: '' });
   const [editingId, setEditingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [videos, setVideos] = useState<VideoContent[]>([]);
   const [playingId, setPlayingId] = useState<number | null>(null);
+  const [videos, setVideos] = useState<VideoContent[]>([]);
 
-  // Fetch videos from server AND check localStorage to restore user's lost data
+  // Document Modal States
+  const [documents, setDocuments] = useState<DocumentContent[]>([]);
+  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
+  const [docModalMode, setDocModalMode] = useState<'add' | 'edit'>('add');
+  const [currentDoc, setCurrentDoc] = useState<{title: string, description: string, file: File | null}>({ title: '', description: '', file: null });
+  const [editingDocId, setEditingDocId] = useState<number | null>(null);
+  const [deletingDocId, setDeletingDocId] = useState<number | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // Fetch videos and documents from server
   useEffect(() => {
+    // Fetch Videos
     fetch('/api/videos')
       .then(res => res.json())
       .then(serverData => {
-        // Check if user has their lost videos in browser memory
         const saved = localStorage.getItem('incheon-ai-videos');
         if (saved) {
           try {
             const localData = JSON.parse(saved);
-            // If local data exists and is longer than server data, it's likely the user's missing videos
             if (localData && localData.length > 0 && localData !== serverData) {
               setVideos(localData);
-              // Auto sync missing local videos back to the server
               fetch('/api/videos', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -69,6 +85,14 @@ export default function App() {
         setVideos(serverData);
       })
       .catch(err => console.error('Failed to load videos:', err));
+
+    // Fetch Documents
+    fetch('/api/documents')
+      .then(res => res.json())
+      .then(serverData => {
+        setDocuments(serverData);
+      })
+      .catch(err => console.error('Failed to load documents:', err));
   }, []);
 
   // Save to server AND localStorage whenever videos change
@@ -81,6 +105,15 @@ export default function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newVideos),
     }).catch(err => console.error('Failed to save videos:', err));
+  };
+
+  const saveDocsToBackend = (newDocuments: DocumentContent[]) => {
+    setDocuments(newDocuments);
+    fetch('/api/documents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newDocuments),
+    }).catch(err => console.error('Failed to save documents:', err));
   };
 
   const getYouTubeId = (url: string) => {
@@ -140,6 +173,92 @@ export default function App() {
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
+  // Document Handlers
+  const openAddDocModal = () => {
+    setDocModalMode('add');
+    setCurrentDoc({ title: '', description: '', file: null });
+    setIsDocModalOpen(true);
+  };
+
+  const openEditDocModal = (doc: DocumentContent) => {
+    setDocModalMode('edit');
+    setEditingDocId(doc.id);
+    setCurrentDoc({ title: doc.title, description: doc.description, file: null });
+    setIsDocModalOpen(true);
+  };
+
+  const confirmDeleteDoc = (id: number) => {
+    const newDocs = documents.filter(d => d.id !== id);
+    saveDocsToBackend(newDocs);
+    setDeletingDocId(null);
+  };
+
+  const handleSaveDoc = async () => {
+    if (!currentDoc.title.trim()) {
+      alert('자료 제목을 입력해주세요.');
+      return;
+    }
+    
+    // In Add mode, file is required
+    if (docModalMode === 'add' && !currentDoc.file) {
+      alert('업로드할 파일을 선택해주세요.');
+      return;
+    }
+
+    setIsUploading(true);
+    let filenameToSave = '';
+
+    // If there's a new file, upload it
+    if (currentDoc.file) {
+      const formData = new FormData();
+      formData.append('file', currentDoc.file);
+      
+      try {
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+        const result = await response.json();
+        if (result.success) {
+          filenameToSave = result.filename;
+        } else {
+          alert('파일 업로드에 실패했습니다.');
+          setIsUploading(false);
+          return;
+        }
+      } catch (err) {
+        console.error(err);
+        alert('파일 업로드 오류가 발생했습니다.');
+        setIsUploading(false);
+        return;
+      }
+    }
+
+    let newDocs = [...documents];
+    if (docModalMode === 'add') {
+      const newDoc: DocumentContent = {
+        id: Date.now(),
+        title: currentDoc.title,
+        description: currentDoc.description,
+        filename: filenameToSave
+      };
+      newDocs = [...newDocs, newDoc];
+    } else if (editingDocId !== null) {
+      // In edit mode, if no new file is selected, keep the old filename
+      const existingDoc = newDocs.find(d => d.id === editingDocId);
+      newDocs = newDocs.map(d => d.id === editingDocId ? { 
+        ...d, 
+        title: currentDoc.title, 
+        description: currentDoc.description,
+        filename: currentDoc.file ? filenameToSave : (existingDoc?.filename || '')
+      } : d);
+    }
+    
+    saveDocsToBackend(newDocs);
+    setIsUploading(false);
+    setIsDocModalOpen(false);
+  };
+
   return (
     <div className="bg-gray-50 text-gray-900 antialiased selection:bg-brand-100 selection:text-brand-700 font-sans">
       {/* Navigation */}
@@ -165,7 +284,7 @@ export default function App() {
         <div className="absolute inset-0 z-0">
           <TextParticleEffect 
             text="인천AI 교육비서" 
-            subtitle="매일 반복되는 업무에 지치셨나요?\n인천 AI 교육비서가 선생님의 소중한 시간을 돌려드립니다."
+            subtitle={"매일 반복되는 업무에 지치셨나요?\n인천 AI 교육비서가 선생님의 소중한 시간을 돌려드립니다."}
           />
         </div>
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-brand-50 rounded-full blur-3xl -z-10 opacity-70"></div>
@@ -465,76 +584,234 @@ export default function App() {
       )}
 
       {/* Resources / Download Section */}
-      <section id="downloads" className="py-24 bg-white">
+      <section id="downloads" className="py-24 bg-white relative">
         <div className="max-w-4xl mx-auto px-6 text-center">
           <motion.div 
             variants={revealVariants} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.15 }}
-            className="mb-16"
+            className="mb-16 relative"
           >
             <h2 className="text-3xl md:text-5xl font-bold mb-6 tracking-tight">필요한 자료를 바로 다운로드하세요.</h2>
             <p className="text-xl text-gray-500 font-medium">상세한 사용 매뉴얼과 교육용 PPT 자료를 제공합니다.</p>
+            
+            {import.meta.env.DEV && (
+              <button 
+                onClick={openAddDocModal}
+                className="absolute right-0 top-0 hidden md:flex items-center gap-2 bg-brand-50 text-brand-600 px-4 py-2.5 rounded-xl font-bold hover:bg-brand-100 transition-colors cursor-pointer"
+              >
+                <Plus className="w-5 h-5" />
+                자료 추가하기
+              </button>
+            )}
+            {import.meta.env.DEV && (
+              <div className="mt-6 md:hidden flex justify-center">
+                <button 
+                  onClick={openAddDocModal}
+                  className="flex items-center gap-2 bg-brand-50 text-brand-600 px-4 py-2.5 rounded-xl font-bold hover:bg-brand-100 transition-colors cursor-pointer"
+                >
+                  <Plus className="w-5 h-5" />
+                  자료 추가하기
+                </button>
+              </div>
+            )}
           </motion.div>
 
-          <div className="grid sm:grid-cols-2 gap-6 text-left">
-            <motion.div 
-              variants={revealVariants} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.15 }}
-              className="border border-gray-100 bg-white rounded-3xl p-8 hover:border-brand-500 hover:shadow-soft transition-all duration-300 group cursor-pointer flex flex-col h-full"
-            >
-              <div className="flex justify-between items-start mb-8">
-                <div className="w-14 h-14 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center">
-                  <FileText className="w-8 h-8" />
-                </div>
-                <div className="w-10 h-10 rounded-full bg-gray-50 text-gray-400 flex items-center justify-center group-hover:bg-brand-50 group-hover:text-brand-600 transition-colors">
-                  <Download className="w-5 h-5" />
-                </div>
-              </div>
-              <div className="mt-auto">
-                <h3 className="text-xl font-bold mb-2">공식 사용자 매뉴얼 (PDF)</h3>
-                <p className="text-gray-500 text-sm mb-4">버전 1.2 • 15MB • 2024.05 업데이트</p>
-                <span className="text-brand-600 font-semibold text-sm group-hover:underline">다운로드</span>
-              </div>
-            </motion.div>
+          {documents.length > 0 ? (
+            <div className="grid sm:grid-cols-2 gap-6 text-left">
+              {documents.map((doc, idx) => (
+                <motion.div 
+                  key={doc.id}
+                  variants={revealVariants} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.15 }} transition={{ delay: idx * 0.1 }}
+                  className="relative border border-gray-100 bg-white rounded-3xl p-8 hover:border-brand-500 hover:shadow-soft transition-all duration-300 group flex flex-col h-full"
+                >
+                  <a href={`/downloads/${doc.filename}`} download className="absolute inset-0 z-10" aria-label={`${doc.title} 다운로드`} />
+                  
+                  <div className="flex justify-between items-start mb-8 relative z-0">
+                    <div className="w-14 h-14 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center">
+                      <FileText className="w-8 h-8" />
+                    </div>
+                    <div className="w-10 h-10 rounded-full bg-gray-50 text-gray-400 flex items-center justify-center group-hover:bg-brand-50 group-hover:text-brand-600 transition-colors relative z-0">
+                      <Download className="w-5 h-5" />
+                    </div>
+                  </div>
+                  
+                  <div className="mt-auto relative z-20 pointer-events-none">
+                    <h3 className="text-xl font-bold mb-2 pr-12 line-clamp-2 pointer-events-auto w-max">{doc.title}</h3>
+                    <p className="text-gray-500 text-sm mb-4 line-clamp-2 pointer-events-auto w-max">{doc.description}</p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-brand-600 font-semibold text-sm group-hover:underline pointer-events-auto">다운로드</span>
+                      {import.meta.env.DEV && (
+                        <div className="flex gap-2 relative z-20 pointer-events-auto">
+                          <button 
+                            onClick={(e) => {
+                              e.preventDefault();
+                              openEditDocModal(doc);
+                            }}
+                            className="p-2 rounded-lg bg-gray-50 text-gray-400 hover:text-brand-600 hover:bg-brand-100 transition-colors cursor-pointer"
+                            title="수정"
+                          >
+                            <Settings className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setDeletingDocId(doc.id);
+                            }}
+                            className="p-2 rounded-lg bg-gray-50 text-gray-400 hover:text-red-600 hover:bg-red-100 transition-colors cursor-pointer"
+                            title="삭제"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-            <motion.div 
-              variants={revealVariants} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.15 }} transition={{ delay: 0.1 }}
-              className="border border-gray-100 bg-white rounded-3xl p-8 hover:border-brand-500 hover:shadow-soft transition-all duration-300 group cursor-pointer flex flex-col h-full"
-            >
-              <div className="flex justify-between items-start mb-8">
-                <div className="w-14 h-14 bg-orange-50 text-orange-500 rounded-2xl flex items-center justify-center">
-                  <Presentation className="w-8 h-8" />
-                </div>
-                <div className="w-10 h-10 rounded-full bg-gray-50 text-gray-400 flex items-center justify-center group-hover:bg-brand-50 group-hover:text-brand-600 transition-colors">
-                  <Download className="w-5 h-5" />
-                </div>
-              </div>
-              <div className="mt-auto">
-                <h3 className="text-xl font-bold mb-2">교직원 연수용 PPT 자료</h3>
-                <p className="text-gray-500 text-sm mb-4">학교 자체 연수 진행을 위한 발표 자료</p>
-                <span className="text-brand-600 font-semibold text-sm group-hover:underline">다운로드</span>
-              </div>
-            </motion.div>
-          </div>
+                  {deletingDocId === doc.id && (
+                    <motion.div 
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="absolute inset-0 z-30 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center rounded-3xl"
+                    >
+                      <Trash2 className="w-12 h-12 text-red-500 mb-4" />
+                      <h4 className="text-lg font-bold text-gray-900 mb-2">자료를 삭제할까요?</h4>
+                      <p className="text-sm text-gray-500 mb-6">삭제된 자료는 복구할 수 없습니다.</p>
+                      <div className="flex gap-3 w-full max-w-[240px]">
+                        <button 
+                          onClick={(e) => { e.preventDefault(); setDeletingDocId(null); }}
+                          className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 font-bold hover:bg-gray-200 transition-all cursor-pointer"
+                        >
+                          취소
+                        </button>
+                        <button 
+                          onClick={(e) => { e.preventDefault(); confirmDeleteDoc(doc.id); }}
+                          className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 transition-all shadow-lg shadow-red-500/20 cursor-pointer"
+                        >
+                          삭제
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-20 text-center border-2 border-dashed border-gray-200 rounded-3xl bg-gray-50">
+              <Files className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-gray-600 mb-2">등록된 자료가 없습니다.</h3>
+              {import.meta.env.DEV && <p className="text-gray-400">자료 추가하기 버튼을 눌러 새 자료를 업로드해보세요.</p>}
+            </div>
+          )}
         </div>
       </section>
 
+      {/* Document Add/Edit Modal */}
+      {isDocModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-gray-900/40 backdrop-blur-sm"
+            onClick={() => !isUploading && setIsDocModalOpen(false)}
+          />
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="relative w-full max-w-xl bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+          >
+            <div className="p-8 pb-6 border-b border-gray-100 flex items-center justify-between bg-white relative z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-brand-50 text-brand-600 rounded-xl flex items-center justify-center">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900">{docModalMode === 'add' ? '새 자료 등록하기' : '자료 수정하기'}</h2>
+              </div>
+              <button 
+                onClick={() => !isUploading && setIsDocModalOpen(false)}
+                className="p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-8 overflow-y-auto">
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">자료 제목</label>
+                  <input 
+                    type="text" 
+                    value={currentDoc.title}
+                    onChange={(e) => setCurrentDoc({ ...currentDoc, title: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 transition-all font-medium"
+                    placeholder="예) 공식 사용자 매뉴얼 (PDF)"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">설명 캡션</label>
+                  <input 
+                    type="text" 
+                    value={currentDoc.description}
+                    onChange={(e) => setCurrentDoc({ ...currentDoc, description: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 transition-all font-medium"
+                    placeholder="예) 최신 업데이트 버전 안내"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">파일 업로드</label>
+                  <div className="flex items-center justify-center w-full">
+                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100">
+                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                        <Download className="w-8 h-8 text-gray-400 mb-2" />
+                        <p className="mb-2 text-sm text-gray-500 font-bold">
+                          {currentDoc.file ? currentDoc.file.name : (docModalMode === 'edit' ? '새 파일을 선택하려면 클릭' : '클릭하여 파일 업로드')}
+                        </p>
+                      </div>
+                      <input 
+                        type="file" 
+                        className="hidden" 
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files.length > 0) {
+                            setCurrentDoc({ ...currentDoc, file: e.target.files[0] });
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                  {docModalMode === 'edit' && !currentDoc.file && (
+                    <p className="mt-2 text-xs text-gray-400">파일을 다시 선택하지 않으면 기존 파일이 유지됩니다.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-8 border-t border-gray-100 flex gap-3">
+              <button 
+                onClick={() => !isUploading && setIsDocModalOpen(false)}
+                className="flex-1 py-4 px-6 rounded-2xl bg-gray-100 text-gray-600 font-bold hover:bg-gray-200 transition-all disabled:opacity-50"
+                disabled={isUploading}
+              >
+                취소
+              </button>
+              <button 
+                onClick={handleSaveDoc}
+                className="flex-2 py-4 px-6 rounded-2xl bg-brand-600 text-white font-bold hover:bg-brand-700 shadow-lg shadow-brand-500/20 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+                disabled={isUploading}
+              >
+                {isUploading ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    업로드 중...
+                  </>
+                ) : (
+                  docModalMode === 'add' ? '콘텐츠 업로드 및 저장' : '수정 완료'
+                )}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
       {/* Footer */}
-      <footer className="bg-gray-900 text-gray-400 py-16">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-10 border-b border-gray-800 pb-10">
-            <div className="flex items-center gap-2 text-white">
-              <Bot className="w-6 h-6 fill-current" />
-              <span className="font-bold text-xl tracking-tight">인천AI교육비서</span>
-            </div>
-            <div className="flex gap-6 font-medium text-sm">
-              <a href="#" className="hover:text-white transition-colors">이용약관</a>
-              <a href="#" className="hover:text-white transition-colors">개인정보처리방침</a>
-              <a href="#" className="hover:text-white transition-colors">고객센터</a>
-            </div>
-          </div>
-          <div className="text-sm">
-            <p className="mb-2">인천광역시교육청 | 주소: 인천광역시 남동구 정각로 9 (구월동) | 대표전화: 032-420-8114</p>
-            <p>© 2024 Incheon Metropolitan City Office of Education. All rights reserved.</p>
-          </div>
+      <footer className="bg-gray-900 text-gray-400 py-12">
+        <div className="max-w-6xl mx-auto px-6 text-center text-sm font-medium">
+          <p>개발자 및 저작권자 인천봉수초 홍찬우</p>
         </div>
       </footer>
     </div>
