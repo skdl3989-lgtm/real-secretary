@@ -38,6 +38,17 @@ interface DocumentContent {
   filename: string;
 }
 
+interface PopupContent {
+  id: number;
+  type: 'image' | 'youtube';
+  title: string;
+  description?: string;
+  content: string; // filename or youtube URL
+  linkUrl?: string; // where to go when image is clicked
+  buttonText?: string; // text for the CTA button
+  isActive: boolean;
+}
+
 export default function App() {
   const [isScrolled, setIsScrolled] = useState(false);
   
@@ -59,11 +70,30 @@ export default function App() {
   const [deletingDocId, setDeletingDocId] = useState<number | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Fetch videos and documents from server
+  // Popup Management States
+  const [popups, setPopups] = useState<PopupContent[]>([]);
+  const [visiblePopups, setVisiblePopups] = useState<PopupContent[]>([]);
+  
+  const [isPopupManagerOpen, setIsPopupManagerOpen] = useState(false);
+  const [popupModalMode, setPopupModalMode] = useState<'list' | 'add' | 'edit'>('list');
+  const [currentPopupForm, setCurrentPopupForm] = useState<{title: string, description: string, type: 'image' | 'youtube', content: string, linkUrl: string, buttonText: string, isActive: boolean, file: File | null}>({ title: '', description: '', type: 'image', content: '', linkUrl: '', buttonText: '', isActive: true, file: null });
+  const [editingPopupId, setEditingPopupId] = useState<number | null>(null);
+  const [deletingPopupId, setDeletingPopupId] = useState<number | null>(null);
+
+  // Fetch videos, documents, and popups from server
   useEffect(() => {
+    // Helper function to safely fetch JSON
+    const fetchJson = async (url: string) => {
+      const res = await fetch(url);
+      const contentType = res.headers.get('content-type');
+      if (!res.ok || !contentType || !contentType.includes('application/json')) {
+        throw new Error(`Failed to fetch ${url} or invalid JSON response`);
+      }
+      return res.json();
+    };
+
     // Fetch Videos
-    fetch('/api/videos')
-      .then(res => res.json())
+    fetchJson('/api/videos')
       .then(serverData => {
         const saved = localStorage.getItem('incheon-ai-videos');
         if (saved) {
@@ -87,15 +117,30 @@ export default function App() {
       .catch(err => console.error('Failed to load videos:', err));
 
     // Fetch Documents
-    fetch('/api/documents')
-      .then(res => res.json())
-      .then(serverData => {
-        setDocuments(serverData);
-      })
+    fetchJson('/api/documents')
+      .then(serverData => setDocuments(serverData))
       .catch(err => console.error('Failed to load documents:', err));
+
+    // Fetch Popups
+    fetchJson('/api/popups')
+      .then(serverData => {
+        setPopups(serverData);
+        
+        // Filter active popups and check local storage for "don't show today"
+        const activePopups = serverData.filter((p: PopupContent) => {
+          if (!p.isActive) return false;
+          const hideUntil = localStorage.getItem(`hide_popup_${p.id}`);
+          if (hideUntil && parseInt(hideUntil) > Date.now()) {
+            return false;
+          }
+          return true;
+        });
+        setVisiblePopups(activePopups);
+      })
+      .catch(err => console.error('Failed to load popups:', err));
   }, []);
 
-  // Save to server AND localStorage whenever videos change
+  // Save to server
   const saveToBackend = (newVideos: VideoContent[]) => {
     setVideos(newVideos);
     localStorage.setItem('incheon-ai-videos', JSON.stringify(newVideos));
@@ -259,6 +304,130 @@ export default function App() {
     setIsDocModalOpen(false);
   };
 
+  // Popup Management Handlers
+  const savePopupsToBackend = (newPopups: PopupContent[]) => {
+    setPopups(newPopups);
+    fetch('/api/popups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newPopups),
+    }).catch(err => console.error('Failed to save popups:', err));
+  };
+
+  const openPopupManager = () => {
+    setPopupModalMode('list');
+    setIsPopupManagerOpen(true);
+  };
+
+  const openAddPopupForm = () => {
+    setPopupModalMode('add');
+    setCurrentPopupForm({ title: '', description: '', type: 'image', content: '', linkUrl: '', buttonText: '', isActive: true, file: null });
+  };
+
+  const openEditPopupForm = (popup: PopupContent) => {
+    setPopupModalMode('edit');
+    setEditingPopupId(popup.id);
+    setCurrentPopupForm({ 
+      title: popup.title, 
+      description: popup.description || '',
+      type: popup.type, 
+      content: popup.content, 
+      linkUrl: popup.linkUrl || '', 
+      buttonText: popup.buttonText || '',
+      isActive: popup.isActive, 
+      file: null 
+    });
+  };
+
+  const confirmDeletePopup = (id: number) => {
+    const newPopups = popups.filter(p => p.id !== id);
+    savePopupsToBackend(newPopups);
+    setDeletingPopupId(null);
+  };
+
+  const handleSavePopup = async () => {
+    if (!currentPopupForm.title.trim()) {
+      alert('팝업 제목을 입력해주세요.');
+      return;
+    }
+    if (currentPopupForm.type === 'youtube' && !currentPopupForm.content.trim()) {
+      alert('유튜브 URL을 입력해주세요.');
+      return;
+    }
+    if (currentPopupForm.type === 'image' && popupModalMode === 'add' && !currentPopupForm.file) {
+      alert('이미지 파일을 업로드해주세요.');
+      return;
+    }
+
+    setIsUploading(true);
+    let contentToSave = currentPopupForm.content;
+
+    if (currentPopupForm.type === 'image' && currentPopupForm.file) {
+      const formData = new FormData();
+      formData.append('file', currentPopupForm.file);
+      try {
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+        const result = await response.json();
+        if (result.success) {
+          contentToSave = result.filename;
+        } else {
+          alert('이미지 업로드에 실패했습니다.');
+          setIsUploading(false);
+          return;
+        }
+      } catch (err) {
+        console.error(err);
+        alert('이미지 업로드 오류가 발생했습니다.');
+        setIsUploading(false);
+        return;
+      }
+    }
+
+    let newPopups = [...popups];
+    if (popupModalMode === 'add') {
+      const newPopup: PopupContent = {
+        id: Date.now(),
+        type: currentPopupForm.type,
+        title: currentPopupForm.title,
+        description: currentPopupForm.description,
+        content: contentToSave,
+        linkUrl: currentPopupForm.linkUrl,
+        buttonText: currentPopupForm.buttonText,
+        isActive: currentPopupForm.isActive
+      };
+      newPopups = [...newPopups, newPopup];
+    } else if (editingPopupId !== null) {
+      const existingPopup = newPopups.find(p => p.id === editingPopupId);
+      newPopups = newPopups.map(p => p.id === editingPopupId ? {
+        ...p,
+        title: currentPopupForm.title,
+        description: currentPopupForm.description,
+        type: currentPopupForm.type,
+        content: currentPopupForm.file ? contentToSave : (currentPopupForm.type === 'image' ? (existingPopup?.content || '') : contentToSave),
+        linkUrl: currentPopupForm.linkUrl,
+        buttonText: currentPopupForm.buttonText,
+        isActive: currentPopupForm.isActive
+      } : p);
+    }
+
+    savePopupsToBackend(newPopups);
+    setIsUploading(false);
+    setPopupModalMode('list');
+  };
+
+  const closeActivePopup = (id: number, dontShowToday: boolean = false) => {
+    if (dontShowToday) {
+      const tomorrow = new Date();
+      tomorrow.setHours(24, 0, 0, 0); // End of today
+      localStorage.setItem(`hide_popup_${id}`, tomorrow.getTime().toString());
+    }
+    setVisiblePopups(prev => prev.filter(p => p.id !== id));
+  };
+
+
   return (
     <div className="bg-gray-50 text-gray-900 antialiased selection:bg-brand-100 selection:text-brand-700 font-sans">
       {/* Navigation */}
@@ -266,7 +435,7 @@ export default function App() {
         <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-2 cursor-pointer" onClick={scrollToTop}>
             <Bot className="text-brand-600 w-8 h-8" />
-            <span className="font-bold text-xl tracking-tight">인천AI교육비서</span>
+            <span className="font-bold text-xl tracking-tight">인천AI교육비서 도우미</span>
           </div>
           <div className="hidden md:flex gap-8 font-medium text-gray-600">
             <a href="#features" className="hover:text-gray-900 transition-colors">주요기능</a>
@@ -385,9 +554,6 @@ export default function App() {
                   영상 추가
                 </button>
               )}
-              <button className="text-brand-600 font-bold flex items-center gap-1 hover:text-brand-700 transition-colors cursor-pointer">
-                유튜브 채널 바로가기 <ArrowRight className="w-4 h-4" />
-              </button>
             </div>
           </motion.div>
 
@@ -808,10 +974,227 @@ export default function App() {
         </div>
       )}
 
+      {/* Visitor Popup Display */}
+      {visiblePopups.length > 0 && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6 pointer-events-none">
+          <div className="absolute inset-0 bg-black/60 pointer-events-auto backdrop-blur-sm" />
+          <div className="relative z-10 w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] pointer-events-auto">
+            <button 
+              onClick={() => closeActivePopup(visiblePopups[0].id)}
+              className="absolute top-4 right-4 z-20 p-2 bg-black/20 hover:bg-black/40 text-white rounded-full transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="flex-1 overflow-y-auto">
+              {visiblePopups[0].type === 'youtube' ? (
+                 <div className="aspect-video w-full bg-black">
+                   <iframe 
+                     className="w-full h-full"
+                     src={`https://www.youtube.com/embed/${getYouTubeId(visiblePopups[0].content)}?autoplay=1`}
+                     title={visiblePopups[0].title}
+                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                     allowFullScreen
+                   ></iframe>
+                 </div>
+              ) : (
+                 <div className="relative w-full">
+                   {visiblePopups[0].linkUrl ? (
+                     <a href={visiblePopups[0].linkUrl} target="_blank" rel="noopener noreferrer">
+                       <img src={`/downloads/${visiblePopups[0].content}`} alt={visiblePopups[0].title} className="w-full h-auto object-contain" />
+                     </a>
+                   ) : (
+                     <img src={`/downloads/${visiblePopups[0].content}`} alt={visiblePopups[0].title} className="w-full h-auto object-contain" />
+                   )}
+                 </div>
+              )}
+              {visiblePopups[0].description && (
+                <div className="p-6 bg-white">
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">{visiblePopups[0].title}</h3>
+                  <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-wrap mb-6">{visiblePopups[0].description}</p>
+                  
+                  {visiblePopups[0].linkUrl && (
+                    <a 
+                      href={visiblePopups[0].linkUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center w-full py-4 px-6 bg-brand-600 text-white font-bold rounded-2xl hover:bg-brand-700 transition-all shadow-lg shadow-brand-500/20 active:scale-[0.98]"
+                    >
+                      {visiblePopups[0].buttonText || '자세히 보기'}
+                    </a>
+                  )}
+                </div>
+              )}
+              {!visiblePopups[0].description && visiblePopups[0].linkUrl && (
+                <div className="p-6 bg-white pt-2">
+                  <a 
+                    href={visiblePopups[0].linkUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center w-full py-4 px-6 bg-brand-600 text-white font-bold rounded-2xl hover:bg-brand-700 transition-all shadow-lg shadow-brand-500/20 active:scale-[0.98]"
+                  >
+                    {visiblePopups[0].buttonText || '자세히 보기'}
+                  </a>
+                </div>
+              )}
+            </div>
+            <div className="bg-gray-50 border-t border-gray-100 p-4">
+               <button 
+                 onClick={() => closeActivePopup(visiblePopups[0].id, true)}
+                 className="w-full py-3 text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors cursor-pointer"
+               >
+                 오늘 하루 그만 보기
+               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Popup Manager Modal */}
+      {isPopupManagerOpen && import.meta.env.DEV && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 sm:p-6">
+          <div className="absolute inset-0 bg-gray-900/40 backdrop-blur-sm" onClick={() => !isUploading && setIsPopupManagerOpen(false)} />
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="relative w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+          >
+            <div className="p-8 pb-6 border-b border-gray-100 flex items-center justify-between bg-white relative z-10">
+              <h2 className="text-2xl font-bold text-gray-900">
+                {popupModalMode === 'list' ? '팝업 관리' : (popupModalMode === 'add' ? '새 팝업 등록' : '팝업 수정')}
+              </h2>
+              <button 
+                onClick={() => !isUploading && setIsPopupManagerOpen(false)}
+                className="p-2 rounded-full hover:bg-gray-100 text-gray-400 cursor-pointer"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-8 bg-gray-50">
+              {popupModalMode === 'list' ? (
+                <div className="space-y-4">
+                  <div className="flex justify-end mb-4">
+                    <button onClick={openAddPopupForm} className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-xl font-bold cursor-pointer">
+                      <Plus className="w-4 h-4" /> 팝업 추가
+                    </button>
+                  </div>
+                  {popups.length > 0 ? (
+                    <div className="grid gap-4">
+                      {popups.map(popup => (
+                        <div key={popup.id} className="bg-white p-5 rounded-2xl border border-gray-100 flex items-center justify-between shadow-sm">
+                          <div className="flex items-center gap-4">
+                            <div className={`w-3 h-3 rounded-full ${popup.isActive ? 'bg-green-500' : 'bg-gray-300'}`} />
+                            <div>
+                              <h4 className="font-bold text-gray-900">{popup.title}</h4>
+                              {popup.description && <p className="text-sm text-gray-500 line-clamp-1">{popup.description}</p>}
+                              <p className="text-xs text-gray-400 uppercase mt-1">{popup.type}</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => openEditPopupForm(popup)} className="p-2 text-gray-400 hover:text-brand-600 cursor-pointer bg-gray-50 rounded-lg"><Settings className="w-4 h-4" /></button>
+                            <button onClick={() => setDeletingPopupId(popup.id)} className="p-2 text-gray-400 hover:text-red-600 cursor-pointer bg-gray-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-10 text-gray-400">등록된 팝업이 없습니다.</div>
+                  )}
+
+                  {deletingPopupId !== null && (
+                    <div className="absolute inset-0 z-20 bg-white/90 backdrop-blur flex flex-col items-center justify-center">
+                       <p className="text-lg font-bold mb-4">정말 삭제하시겠습니까?</p>
+                       <div className="flex gap-4">
+                         <button onClick={() => setDeletingPopupId(null)} className="px-6 py-2 bg-gray-200 rounded-xl cursor-pointer font-bold">취소</button>
+                         <button onClick={() => confirmDeletePopup(deletingPopupId)} className="px-6 py-2 bg-red-600 text-white rounded-xl cursor-pointer font-bold">삭제</button>
+                       </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">팝업 제목 (관리용)</label>
+                    <input type="text" value={currentPopupForm.title} onChange={e => setCurrentPopupForm({...currentPopupForm, title: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200" placeholder="예: 2024 신규 연수 안내" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">팝업 설명 (선택사항)</label>
+                    <textarea value={currentPopupForm.description} onChange={e => setCurrentPopupForm({...currentPopupForm, description: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500" placeholder="팝업에 대한 간단한 설명을 입력하세요." rows={3} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">활성화 상태</label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={currentPopupForm.isActive} onChange={e => setCurrentPopupForm({...currentPopupForm, isActive: e.target.checked})} className="w-5 h-5 rounded text-brand-600" />
+                      <span>홈페이지 접속 시 팝업 띄우기</span>
+                    </label>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">팝업 유형</label>
+                    <div className="flex gap-4 mb-4">
+                      <label className="flex items-center gap-2 cursor-pointer bg-white px-4 py-3 border border-gray-200 rounded-xl flex-1">
+                        <input type="radio" name="popuptype" checked={currentPopupForm.type === 'image'} onChange={() => setCurrentPopupForm({...currentPopupForm, type: 'image'})} />
+                        <span>이미지 업로드</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer bg-white px-4 py-3 border border-gray-200 rounded-xl flex-1">
+                        <input type="radio" name="popuptype" checked={currentPopupForm.type === 'youtube'} onChange={() => setCurrentPopupForm({...currentPopupForm, type: 'youtube'})} />
+                        <span>유튜브 영상</span>
+                      </label>
+                    </div>
+                  </div>
+                  
+                  {currentPopupForm.type === 'youtube' && (
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">유튜브 링크 URL</label>
+                      <input type="text" value={currentPopupForm.content} onChange={e => setCurrentPopupForm({...currentPopupForm, content: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200" placeholder="https://www.youtube.com/watch?v=..." />
+                    </div>
+                  )}
+
+                  {currentPopupForm.type === 'image' && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">이미지 업로드</label>
+                        <input type="file" accept="image/*" onChange={e => setCurrentPopupForm({...currentPopupForm, file: e.target.files ? e.target.files[0] : null})} className="w-full p-2 bg-white border border-gray-200 rounded-xl" />
+                        {popupModalMode === 'edit' && !currentPopupForm.file && <p className="text-xs text-gray-400 mt-2">새 이미지를 선택하지 않으면 기존 이미지가 유지됩니다.</p>}
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-bold text-gray-700 mb-2">클릭 시 이동할 링크 (선택사항)</label>
+                          <input type="text" value={currentPopupForm.linkUrl} onChange={e => setCurrentPopupForm({...currentPopupForm, linkUrl: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200" placeholder="https://..." />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-bold text-gray-700 mb-2">버튼 글자 (선택사항)</label>
+                          <input type="text" value={currentPopupForm.buttonText} onChange={e => setCurrentPopupForm({...currentPopupForm, buttonText: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200" placeholder="예: 자세히 보기" />
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {popupModalMode !== 'list' && (
+              <div className="p-6 border-t border-gray-100 flex gap-3 bg-white">
+                <button onClick={() => setPopupModalMode('list')} className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl cursor-pointer">취소</button>
+                <button onClick={handleSavePopup} disabled={isUploading} className="flex-1 py-3 bg-brand-600 text-white font-bold rounded-xl cursor-pointer flex justify-center">
+                  {isUploading ? '저장 중...' : '저장하기'}
+                </button>
+              </div>
+            )}
+          </motion.div>
+        </div>
+      )}
+
       {/* Footer */}
-      <footer className="bg-gray-900 text-gray-400 py-12">
+      <footer className="bg-gray-900 text-gray-400 py-12 relative">
         <div className="max-w-6xl mx-auto px-6 text-center text-sm font-medium">
           <p>개발자 및 저작권자 인천봉수초 홍찬우</p>
+          {import.meta.env.DEV && (
+            <button 
+              onClick={openPopupManager}
+              className="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-full border border-gray-700 hover:bg-gray-800 text-gray-300 transition-colors cursor-pointer text-xs"
+            >
+              <Settings className="w-4 h-4" /> 팝업 관리
+            </button>
+          )}
         </div>
       </footer>
     </div>

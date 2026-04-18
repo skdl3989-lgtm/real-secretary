@@ -10,11 +10,16 @@ const __dirname = path.dirname(__filename);
 
 const VIDEOS_FILE = path.join(__dirname, 'src', 'constants', 'videos.json');
 const DOCUMENTS_FILE = path.join(__dirname, 'src', 'constants', 'documents.json');
+const POPUPS_FILE = path.join(__dirname, 'src', 'constants', 'popups.json');
 const UPLOADS_DIR = path.join(__dirname, 'public', 'downloads');
 
 // Ensure the data files and upload directories exist
 if (!fs.existsSync(path.dirname(VIDEOS_FILE))) {
   fs.mkdirSync(path.dirname(VIDEOS_FILE), { recursive: true });
+}
+
+if (!fs.existsSync(POPUPS_FILE)) {
+  fs.writeFileSync(POPUPS_FILE, JSON.stringify([], null, 2));
 }
 if (!fs.existsSync(VIDEOS_FILE)) {
   fs.writeFileSync(VIDEOS_FILE, JSON.stringify([
@@ -110,6 +115,26 @@ async function startServer() {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to save documents' });
+    }
+  });
+
+  // API Routes for Popups
+  app.get('/api/popups', (req, res) => {
+    try {
+      const data = fs.readFileSync(POPUPS_FILE, 'utf-8');
+      res.json(JSON.parse(data));
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to read popups' });
+    }
+  });
+
+  app.post('/api/popups', (req, res) => {
+    try {
+      const popups = req.body;
+      fs.writeFileSync(POPUPS_FILE, JSON.stringify(popups, null, 2));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to save popups' });
     }
   });
 
