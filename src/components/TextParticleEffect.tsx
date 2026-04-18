@@ -3,110 +3,115 @@ import { prepareWithSegments, layoutWithLines } from '@chenglou/pretext';
 
 interface ParticleEffectProps {
   text?: string;
+  subtitle?: string;
 }
 
-class Particle {
+class CharParticle {
+  char: string;
+  font: string;
   baseX: number;
   baseY: number;
   x: number;
   y: number;
-  size: number;
-  density: number;
-  friction: number;
-  spring: number;
   vx: number;
   vy: number;
+  friction: number;
+  spring: number;
   isFalling: boolean;
-  angle: number;
   color: string;
+  density: number;
   canvasHeight: number;
 
-  constructor(x: number, y: number, canvasHeight: number) {
+  constructor(char: string, font: string, x: number, y: number, color: string, canvasHeight: number) {
+    this.char = char;
+    this.font = font;
     this.baseX = x;
     this.baseY = y;
     this.canvasHeight = canvasHeight;
+    this.color = color;
+
+    // "진짜 비처럼" - No horizontal scattering, exact target X, randomly high up
+    this.x = x;
+    this.y = (Math.random() * -canvasHeight * 1.5) - 50;
+
+    this.density = (Math.random() * 20) + 15;
     
-    // Initial falling position
-    this.x = x + (Math.random() * 4 - 2); 
-    this.y = (Math.random() * -canvasHeight * 2.5) - 50; 
+    // Higher friction for horizontal (vx) and lower for vertical (vy) later to prevent swaying
+    this.friction = 0.88;
+    this.spring = 0.08;
     
-    this.size = Math.random() * 1.5 + 0.8; // Slightly larger for better visibility on white
-    
-    this.density = (Math.random() * 30) + 10;
-    this.friction = Math.random() * 0.04 + 0.88;
-    this.spring = Math.random() * 0.02 + 0.03;
-    
-    this.vx = 0;
-    this.vy = Math.random() * 5 + 5;
+    this.vx = 0; // Pure vertical drop
+    this.vy = Math.random() * 8 + 5;
     
     this.isFalling = true;
-    this.angle = Math.random() * Math.PI * 2;
-    
-    // Darker, high-contrast professional colors for light background
-    const colors = ['#1d4ed8', '#2563eb', '#3b82f6', '#10b981', '#6366f1'];
-    this.color = colors[Math.floor(Math.random() * colors.length)];
   }
 
   draw(ctx: CanvasRenderingContext2D) {
+    ctx.font = this.font;
     ctx.fillStyle = this.color;
-    // Set global alpha slightly lower for trailing effect on white
-    ctx.globalAlpha = 0.8;
-    ctx.beginPath();
     
-    if (this.isFalling) {
-      ctx.ellipse(this.x, this.y, this.size * 0.6, this.size * 3.5, 0, 0, Math.PI * 2);
-    } else {
-      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-    }
-    
-    ctx.closePath();
-    ctx.fill();
-    ctx.globalAlpha = 1;
+    const isSettled = !this.isFalling && Math.abs(this.vx) < 0.1 && Math.abs(this.vy) < 0.1;
+    const drawX = isSettled ? this.baseX : this.x;
+    const drawY = isSettled ? this.baseY : this.y;
+
+    ctx.fillText(this.char, drawX, drawY);
   }
 
   update(mouseX: number | null, mouseY: number | null, mouseRadius: number, clicked: boolean) {
     if (this.isFalling) {
-      this.vy += 0.8;
-      if (this.vy > 25) this.vy = 25;
+      this.vy += 0.6; // gravity
+      if (this.vy > 30) this.vy = 30; // terminal velocity
       
       this.y += this.vy;
+      // Force x to stay exactly on target during fall (비처럼 내리게)
+      this.x = this.baseX;
       
+      // "통통 튀는 것 정도는 좋아" - Pleasant bounce
       if (this.y >= this.baseY) {
         this.y = this.baseY;
-        this.vy *= -0.3;
-        this.isFalling = false;
+        this.vy *= -0.4; // 40% bounce energy
+        
+        // Stop falling when bounce settles
+        if (Math.abs(this.vy) < 1.0) {
+          this.isFalling = false;
+          this.vy = 0;
+        }
       }
     } else {
-      this.angle += 0.05;
-      const targetX = this.baseX + Math.cos(this.angle) * 1.5;
-      const targetY = this.baseY + Math.sin(this.angle) * 1.5;
+      let hoverForce = false;
 
       if (mouseX !== null && mouseY !== null) {
         const dx = mouseX - this.x;
         const dy = mouseY - this.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
         
-        if (distance < mouseRadius) {
-          const forceDirectionX = dx / distance;
-          const forceDirectionY = dy / distance;
-          const force = (mouseRadius - distance) / mouseRadius;
-          const direction = clicked ? -1.5 : 1; 
+        if (Math.abs(dx) < mouseRadius && Math.abs(dy) < mouseRadius) {
+          const distanceSq = dx * dx + dy * dy;
           
-          const pushX = forceDirectionX * force * this.density * direction;
-          const pushY = forceDirectionY * force * this.density * direction;
-          
-          this.vx -= pushX;
-          this.vy -= pushY;
-        } else {
-          this.vx += (targetX - this.x) * this.spring;
-          this.vy += (targetY - this.y) * this.spring;
+          if (distanceSq < mouseRadius * mouseRadius) {
+            hoverForce = true;
+            const distance = Math.sqrt(distanceSq);
+            const forceDirectionX = dx / distance;
+            const forceDirectionY = dy / distance;
+            const force = (mouseRadius - distance) / mouseRadius;
+            const direction = clicked ? -2 : 1.2; 
+            
+            const pushX = forceDirectionX * force * this.density * direction;
+            const pushY = forceDirectionY * force * this.density * direction;
+            
+            this.vx -= pushX;
+            this.vy -= pushY;
+          }
         }
-      } else {
-        this.vx += (targetX - this.x) * this.spring;
-        this.vy += (targetY - this.y) * this.spring;
+      } 
+      
+      if (!hoverForce) {
+        // Tighter spring for X to eliminate swaying, normal spring for Y to allow hovering bounce
+        this.vx += (this.baseX - this.x) * (this.spring * 1.5);
+        this.vy += (this.baseY - this.y) * this.spring;
       }
 
-      this.vx *= this.friction;
+      // Kill horizontal velocity much faster to prevent side-to-side pendulum sway
+      this.vx *= 0.75; 
       this.vy *= this.friction;
       
       this.x += this.vx;
@@ -115,9 +120,9 @@ class Particle {
   }
 }
 
-export default function TextParticleEffect({ text = "인천AI 교육비서" }: ParticleEffectProps) {
+export default function TextParticleEffect({ text = "인천AI 교육비서", subtitle = "" }: ParticleEffectProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const particleArray = useRef<Particle[]>([]);
+  const particleArray = useRef<CharParticle[]>([]);
   const mouse = useRef<{ x: number | null; y: number | null; radius: number; clicked: boolean }>({
     x: null,
     y: null,
@@ -128,7 +133,8 @@ export default function TextParticleEffect({ text = "인천AI 교육비서" }: P
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    // We do NOT need willReadFrequently anymore because there is no getImageData loop! Extreme performance gain.
+    const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     let animationId: number;
@@ -139,55 +145,98 @@ export default function TextParticleEffect({ text = "인천AI 교육비서" }: P
       const w = window.innerWidth;
       const h = window.innerHeight;
       
-      canvas.width = w;
-      canvas.height = h;
-
-      // Use pretext for layout (multiline handle)
-      const fontSize = Math.min(w / 8, 100);
-      const font = `900 ${fontSize}px "Pretendard"`;
+      const dpr = window.devicePixelRatio || 1;
       
-      // We use pretext to calculate where the lines should be
-      const prepared = prepareWithSegments(text, font);
-      const lineHeight = fontSize * 1.2;
-      const { lines } = layoutWithLines(prepared, w * 0.8, lineHeight);
-
-      // Temporary canvas to draw text and scan pixels
-      const tempCanvas = document.createElement('canvas');
-      const tempCtx = tempCanvas.getContext('2d');
-      if (!tempCtx) return;
-      tempCanvas.width = canvas.width;
-      tempCanvas.height = canvas.height;
-      tempCtx.fillStyle = 'white';
-      tempCtx.font = font;
-      tempCtx.textAlign = 'center';
-      tempCtx.textBaseline = 'middle';
-
-      const totalHeight = lines.length * lineHeight;
-      const startY = (h - totalHeight) / 2 + lineHeight / 2;
-
-      lines.forEach((line, index) => {
-        tempCtx.fillText(line.text, w / 2, startY + index * lineHeight);
-      });
-
-      const textCoordinates = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
-      const gap = 2;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
       
-      for (let y = 0; y < textCoordinates.height; y += gap) {
-        for (let x = 0; x < textCoordinates.width; x += gap) {
-          if (textCoordinates.data[(y * 4 * textCoordinates.width) + (x * 4) + 3] > 128) {
-            particleArray.current.push(new Particle(x, y, canvas.height));
+      ctx.setTransform(1, 0, 0, 1, 0, 0); 
+      ctx.scale(dpr, dpr);
+
+      // Pretext scaling
+      const fontSize = Math.min(w / 8, 110);
+      const font = `900 ${fontSize}px "Pretendard", sans-serif`;
+      
+      const titlePrepared = prepareWithSegments(text, font);
+      const titleLineHeight = fontSize * 1.1;
+      const titleLayout = layoutWithLines(titlePrepared, w * 0.9, titleLineHeight);
+
+      const subtitleFontSize = Math.min(w / 28, 26);
+      const subtitleFont = `600 ${subtitleFontSize}px "Pretendard", sans-serif`;
+      const subtitlePrepared = prepareWithSegments(subtitle, subtitleFont);
+      const subtitleLineHeight = subtitleFontSize * 1.6;
+      const subtitleLayout = layoutWithLines(subtitlePrepared, w * 0.8, subtitleLineHeight);
+
+      // We only measure using the context
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const titleTotalHeight = titleLayout.lines.length * titleLineHeight;
+      const subtitleTotalHeight = subtitle ? subtitleLayout.lines.length * subtitleLineHeight : 0;
+      const gapBetween = subtitle ? 60 : 0;
+      
+      const totalCombinedHeight = titleTotalHeight + gapBetween + subtitleTotalHeight;
+      let currentY = (h - totalCombinedHeight) / 2 + titleLineHeight / 2 - 40;
+
+      // Extract coordinates for exact characters
+      ctx.font = font;
+      titleLayout.lines.forEach((line) => {
+        const fullWidth = ctx.measureText(line.text).width;
+        const startX = (w - fullWidth) / 2;
+        
+        for (let i = 0; i < line.text.length; i++) {
+          const char = line.text[i];
+          if (char.trim() !== '') {
+            const prefixWidth = ctx.measureText(line.text.substring(0, i)).width;
+            const charWidth = ctx.measureText(char).width;
+            const targetX = startX + prefixWidth + (charWidth / 2);
+            particleArray.current.push(new CharParticle(char, font, targetX, currentY, '#0f172a', h));
           }
         }
+        currentY += titleLineHeight;
+      });
+
+      if (subtitle) {
+        currentY += gapBetween - titleLineHeight / 2 - subtitleLineHeight / 2;
+        ctx.font = subtitleFont;
+        
+        subtitleLayout.lines.forEach((line) => {
+          const fullWidth = ctx.measureText(line.text).width;
+          const startX = (w - fullWidth) / 2;
+          
+          for (let i = 0; i < line.text.length; i++) {
+            const char = line.text[i];
+            if (char.trim() !== '') {
+              const prefixWidth = ctx.measureText(line.text.substring(0, i)).width;
+              const charWidth = ctx.measureText(char).width;
+              const targetX = startX + prefixWidth + (charWidth / 2);
+              
+              // Apply brand color only to the specific combination
+              const hlString = "인천 AI 교육비서";
+              const hlIndex = line.text.indexOf(hlString);
+              let color = '#64748b'; // standard slate-500
+              if (hlIndex !== -1 && i >= hlIndex && i < hlIndex + hlString.length) {
+                color = '#0284c7'; // brand color
+              }
+              
+              particleArray.current.push(new CharParticle(char, subtitleFont, targetX, currentY, color, h));
+            }
+          }
+          currentY += subtitleLineHeight;
+        });
       }
     };
 
     const animate = () => {
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'; 
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      ctx.clearRect(0, 0, w, h);
       
-      // Default composite operation is better for light backgrounds
-      // lighter is only for neon effects on dark backgrounds
+      // Ensure text rendering alignment is maintained per frame
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
       
       particleArray.current.forEach(particle => {
         particle.update(mouse.current.x, mouse.current.y, mouse.current.radius, mouse.current.clicked);
@@ -198,12 +247,12 @@ export default function TextParticleEffect({ text = "인천AI 교육비서" }: P
 
     const handleMouseMove = (e: MouseEvent) => {
       mouse.current.x = e.clientX;
-      mouse.current.y = e.clientY;
+      mouse.current.y = e.clientY + window.scrollY;
     };
 
     const handleTouchMove = (e: TouchEvent) => {
       mouse.current.x = e.touches[0].clientX;
-      mouse.current.y = e.touches[0].clientY;
+      mouse.current.y = e.touches[0].clientY + window.scrollY;
     };
 
     const handleMouseDown = () => { mouse.current.clicked = true; };
@@ -230,7 +279,6 @@ export default function TextParticleEffect({ text = "인천AI 교육비서" }: P
     window.addEventListener('mouseout', handleMouseOut);
     window.addEventListener('resize', handleResize);
 
-    // Initial setup
     document.fonts.ready.then(() => {
       setTimeout(() => {
         init();
@@ -249,7 +297,7 @@ export default function TextParticleEffect({ text = "인천AI 교육비서" }: P
       window.removeEventListener('mouseout', handleMouseOut);
       window.removeEventListener('resize', handleResize);
     };
-  }, [text]);
+  }, [text, subtitle]);
 
   return (
     <canvas 

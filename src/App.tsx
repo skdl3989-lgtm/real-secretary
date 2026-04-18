@@ -41,17 +41,41 @@ export default function App() {
   const [videos, setVideos] = useState<VideoContent[]>([]);
   const [playingId, setPlayingId] = useState<number | null>(null);
 
-  // Fetch videos from server on mount
+  // Fetch videos from server AND check localStorage to restore user's lost data
   useEffect(() => {
     fetch('/api/videos')
       .then(res => res.json())
-      .then(data => setVideos(data))
+      .then(serverData => {
+        // Check if user has their lost videos in browser memory
+        const saved = localStorage.getItem('incheon-ai-videos');
+        if (saved) {
+          try {
+            const localData = JSON.parse(saved);
+            // If local data exists and is longer than server data, it's likely the user's missing videos
+            if (localData && localData.length > 0 && localData !== serverData) {
+              setVideos(localData);
+              // Auto sync missing local videos back to the server
+              fetch('/api/videos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(localData),
+              });
+              return;
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        }
+        setVideos(serverData);
+      })
       .catch(err => console.error('Failed to load videos:', err));
   }, []);
 
-  // Save to server whenever videos change
+  // Save to server AND localStorage whenever videos change
   const saveToBackend = (newVideos: VideoContent[]) => {
     setVideos(newVideos);
+    localStorage.setItem('incheon-ai-videos', JSON.stringify(newVideos));
+    
     fetch('/api/videos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -138,19 +162,22 @@ export default function App() {
 
       {/* Hero Section */}
       <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden flex flex-col justify-center items-center text-center px-4 min-h-[90vh] bg-white">
+        <div className="absolute inset-0 z-0">
+          <TextParticleEffect 
+            text="인천AI 교육비서" 
+            subtitle="매일 반복되는 업무에 지치셨나요?\n인천 AI 교육비서가 선생님의 소중한 시간을 돌려드립니다."
+          />
+        </div>
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-brand-50 rounded-full blur-3xl -z-10 opacity-70"></div>
-        <TextParticleEffect text="인천AI 교육비서" />
 
-        <motion.div 
-          variants={revealVariants} 
-          initial="hidden" 
-          animate="visible"
-          className="max-w-4xl mx-auto relative z-10 pointer-events-none"
-        >
-          <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-12 leading-[1.1] opacity-0 text-gray-900">
-            인천AI 교육비서
-          </h1>
-        </motion.div>
+        <div className="relative z-10 max-w-5xl mx-auto px-6 text-center pointer-events-none mt-40">
+          <motion.div 
+            variants={revealVariants} 
+            initial="hidden" 
+            animate="visible"
+          >
+          </motion.div>
+        </div>
 
         <motion.div 
           className="absolute bottom-10 left-1/2 -translate-x-1/2 text-gray-400"
