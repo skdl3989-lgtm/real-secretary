@@ -8,9 +8,9 @@ import multer from 'multer';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const VIDEOS_FILE = path.join(__dirname, 'src', 'constants', 'videos.json');
-const DOCUMENTS_FILE = path.join(__dirname, 'src', 'constants', 'documents.json');
-const POPUPS_FILE = path.join(__dirname, 'src', 'constants', 'popups.json');
+const VIDEOS_FILE = path.join(__dirname, 'data', 'videos.json');
+const DOCUMENTS_FILE = path.join(__dirname, 'data', 'documents.json');
+const POPUPS_FILE = path.join(__dirname, 'data', 'popups.json');
 const UPLOADS_DIR = path.join(__dirname, 'public', 'downloads');
 
 // Ensure the data files and upload directories exist
@@ -22,35 +22,11 @@ if (!fs.existsSync(POPUPS_FILE)) {
   fs.writeFileSync(POPUPS_FILE, JSON.stringify([], null, 2));
 }
 if (!fs.existsSync(VIDEOS_FILE)) {
-  fs.writeFileSync(VIDEOS_FILE, JSON.stringify([
-    {
-      id: 1,
-      title: '[학교지원단-교원업무지원과] 인천 AI 교육비서 서비스 안내 및 활용 사례 소개',
-      link: 'https://www.youtube.com/watch?v=O_6Z_rP-7V0'
-    },
-    {
-      id: 2,
-      title: '인천AI교육비서 실제 학급 경영 활용 사례',
-      link: 'https://www.youtube.com/watch?v=O_6Z_rP-7V0'
-    }
-  ], null, 2));
+  fs.writeFileSync(VIDEOS_FILE, JSON.stringify([], null, 2));
 }
 
 if (!fs.existsSync(DOCUMENTS_FILE)) {
-  fs.writeFileSync(DOCUMENTS_FILE, JSON.stringify([
-    {
-      id: 1,
-      title: '공식 사용자 매뉴얼 (PDF)',
-      description: '버전 1.2 • 15MB • 2024.05 업데이트',
-      filename: 'manual.pdf' // Placeholders, files might not exist yet
-    },
-    {
-      id: 2,
-      title: '교직원 연수용 PPT 자료',
-      description: '학교 자체 연수 진행을 위한 발표 자료',
-      filename: 'training.ppt'
-    }
-  ], null, 2));
+  fs.writeFileSync(DOCUMENTS_FILE, JSON.stringify([], null, 2));
 }
 
 if (!fs.existsSync(UPLOADS_DIR)) {

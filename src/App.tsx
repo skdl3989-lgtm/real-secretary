@@ -442,9 +442,27 @@ export default function App() {
             <a href="#tutorials" className="hover:text-gray-900 transition-colors">사용방법</a>
             <a href="#downloads" className="hover:text-gray-900 transition-colors">자료실</a>
           </div>
-          <button className="bg-gray-900 text-white px-5 py-2.5 rounded-full font-medium hover:bg-gray-800 transition-colors shadow-sm cursor-pointer">
+          <motion.button 
+            onClick={() => window.location.href = 'https://auth.mycl.io/realms/telas/protocol/openid-connect/auth?client_id=b2b&redirect_uri=https%3A%2F%2Fmycl.io%2F%3Ftenant%3Dincheon&state=b7803258-2719-4d01-a1d0-713cdc7f4511&response_mode=fragment&response_type=code&scope=openid&nonce=bb316bba-03fd-4543-9ca4-2dfd3d0b83d6&code_challenge=2Vzbn3Yi5YcetP1tBRSWGr78aFpnHxuN4m9XB1PTWls&code_challenge_method=S256'}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            animate={{ 
+              boxShadow: ["0px 0px 0px 0px rgba(37, 99, 235, 0)", "0px 0px 15px 4px rgba(37, 99, 235, 0.4)", "0px 0px 0px 0px rgba(37, 99, 235, 0)"] 
+            }}
+            transition={{ 
+              boxShadow: { repeat: Infinity, duration: 2 }
+            }}
+            className="relative overflow-hidden bg-brand-600 text-white px-6 py-2.5 rounded-full font-bold hover:bg-brand-700 transition-colors shadow-lg cursor-pointer flex items-center gap-2 group"
+          >
+            <motion.div
+              initial={{ x: '-150%' }}
+              animate={{ x: '150%' }}
+              transition={{ repeat: Infinity, duration: 2, ease: "easeInOut", repeatDelay: 1 }}
+              className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -skew-x-[25deg] pointer-events-none"
+            />
+            <Sparkles className="w-4 h-4 text-blue-100 group-hover:rotate-12 transition-transform" />
             시작하기
-          </button>
+          </motion.button>
         </div>
       </nav>
 
@@ -496,11 +514,11 @@ export default function App() {
               className="bg-gray-50 rounded-[2rem] p-10 hover:shadow-soft transition-shadow duration-300"
             >
               <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm mb-8 text-brand-600">
-                <Files className="w-8 h-8" />
+                <Bot className="w-8 h-8" />
               </div>
-              <h3 className="text-2xl font-bold mb-4">공문서 초안 작성</h3>
+              <h3 className="text-2xl font-bold mb-4">최신 멀티 LLM 통합 지원</h3>
               <p className="text-gray-500 leading-relaxed font-medium">
-                핵심 내용만 입력하세요. 인천 교육청 양식에 맞춘 완벽한 기안문 초안을 10초 만에 완성해 드립니다.
+                ChatGPT, Claude, Gemini 등 최신 생성형 AI를 한 곳에서 활용하세요. 교육청 지침과 지원 공문을 근거로 정확하고 신뢰할 수 있는 맞춤형 답변을 제공합니다.
               </p>
             </motion.div>
 
@@ -509,11 +527,11 @@ export default function App() {
               className="bg-gray-50 rounded-[2rem] p-10 hover:shadow-soft transition-shadow duration-300"
             >
               <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm mb-8 text-green-500">
-                <CalendarCheck className="w-8 h-8" />
+                <Sparkles className="w-8 h-8" />
               </div>
-              <h3 className="text-2xl font-bold mb-4">학사 일정 자동화</h3>
+              <h3 className="text-2xl font-bold mb-4">맞춤형 AI 업무 챗봇 생성</h3>
               <p className="text-gray-500 leading-relaxed font-medium">
-                복잡한 주간/월간 행사 계획을 자동으로 분류하고, 학부모 가정통신문으로 변환까지 한 번에 처리합니다.
+                복잡한 프롬프트 작성 없이도 내 업무에 딱 맞는 AI 챗봇을 손쉽게 만들 수 있습니다. 다른 선생님들이 미리 만들어둔 유용한 챗봇도 공유받아 즉시 활용해 보세요.
               </p>
             </motion.div>
 
@@ -522,11 +540,11 @@ export default function App() {
               className="bg-gray-50 rounded-[2rem] p-10 hover:shadow-soft transition-shadow duration-300"
             >
               <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm mb-8 text-purple-500">
-                <GraduationCap className="w-8 h-8" />
+                <FileText className="w-8 h-8" />
               </div>
-              <h3 className="text-2xl font-bold mb-4">학생 관찰 기록 보조</h3>
+              <h3 className="text-2xl font-bold mb-4">똑똑한 AI 한글 문서 에디터</h3>
               <p className="text-gray-500 leading-relaxed font-medium">
-                평소 기록해둔 짧은 메모들을 종합하여, 생기부 입력에 적합한 교육적이고 정제된 문장으로 다듬어 줍니다.
+                기존 한글(HWP) 문서의 표와 양식을 무너뜨리지 않고 AI가 자연스럽게 빈칸을 채워줍니다. 번거로운 복사·붙여넣기 없이 복잡한 서류 작업을 단숨에 끝내세요.
               </p>
             </motion.div>
           </div>
@@ -757,7 +775,6 @@ export default function App() {
             className="mb-16 relative"
           >
             <h2 className="text-3xl md:text-5xl font-bold mb-6 tracking-tight">필요한 자료를 바로 다운로드하세요.</h2>
-            <p className="text-xl text-gray-500 font-medium">상세한 사용 매뉴얼과 교육용 PPT 자료를 제공합니다.</p>
             
             {import.meta.env.DEV && (
               <button 
