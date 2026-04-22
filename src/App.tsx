@@ -350,14 +350,6 @@ export default function App() {
       alert('팝업 제목을 입력해주세요.');
       return;
     }
-    if (currentPopupForm.type === 'youtube' && !currentPopupForm.content.trim()) {
-      alert('유튜브 URL을 입력해주세요.');
-      return;
-    }
-    if (currentPopupForm.type === 'image' && popupModalMode === 'add' && !currentPopupForm.file) {
-      alert('이미지 파일을 업로드해주세요.');
-      return;
-    }
 
     setIsUploading(true);
     let contentToSave = currentPopupForm.content;
@@ -476,37 +468,35 @@ export default function App() {
         </div>
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-brand-50 rounded-full blur-3xl -z-10 opacity-70"></div>
 
-        <div className="relative z-10 max-w-5xl mx-auto px-6 text-center pointer-events-none mb-20">
+        <div className="relative z-10 max-w-5xl mx-auto px-6 text-center pointer-events-none mt-40">
           <motion.div 
             variants={revealVariants} 
             initial="hidden" 
             animate="visible"
-            className="flex flex-col items-center gap-12"
+            className="flex flex-col items-center"
           >
-            {/* The gap here is handled by the TextParticleEffect's internal positioning */}
-            <div className="h-[25vh]"></div> 
-            
+            {/* The button is placed inside this container but with its own falling animation */}
             <motion.button
-              initial={{ y: -800, opacity: 0 }}
+              initial={{ y: -1000, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ 
                 type: "spring",
-                damping: 15,
-                stiffness: 70,
-                delay: 1.5, // Appears after the main text starts settling
+                damping: 20,
+                stiffness: 90,
+                delay: 2.5, // Appears after the title and subtitle particles settle
               }}
               onClick={() => window.location.href = 'https://auth.mycl.io/realms/telas/protocol/openid-connect/auth?client_id=b2b&redirect_uri=https%3A%2F%2Fmycl.io%2F%3Ftenant%3Dincheon&state=b7803258-2719-4d01-a1d0-713cdc7f4511&response_mode=fragment&response_type=code&scope=openid&nonce=bb316bba-03fd-4543-9ca4-2dfd3d0b83d6&code_challenge=2Vzbn3Yi5YcetP1tBRSWGr78aFpnHxuN4m9XB1PTWls&code_challenge_method=S256'}
-              className="pointer-events-auto bg-brand-600 text-white px-12 py-5 rounded-full font-bold text-2xl hover:bg-brand-700 transition-all shadow-2xl shadow-brand-500/40 flex items-center gap-4 group relative overflow-hidden active:scale-95"
+              className="pointer-events-auto mt-20 relative overflow-hidden bg-brand-600 text-white px-10 py-4 rounded-full font-bold text-xl hover:bg-brand-700 transition-colors shadow-2xl shadow-brand-500/30 flex items-center gap-3 group"
             >
               <motion.div
                 initial={{ x: '-150%' }}
                 animate={{ x: '150%' }}
-                transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut", repeatDelay: 1.5 }}
+                transition={{ repeat: Infinity, duration: 2, ease: "easeInOut", repeatDelay: 1 }}
                 className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -skew-x-[25deg] pointer-events-none"
               />
-              <Sparkles className="w-7 h-7 text-blue-100 group-hover:rotate-12 transition-transform" />
+              <Sparkles className="w-6 h-6 text-blue-100 group-hover:rotate-12 transition-transform" />
               지금 시작하기
-              <ArrowRight className="w-7 h-7 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
             </motion.button>
           </motion.div>
         </div>
@@ -1029,7 +1019,7 @@ export default function App() {
               <X className="w-5 h-5" />
             </button>
             <div className="flex-1 overflow-y-auto">
-              {visiblePopups[0].type === 'youtube' ? (
+              {visiblePopups[0].type === 'youtube' && visiblePopups[0].content ? (
                  <div className="aspect-video w-full bg-black">
                    <iframe 
                      className="w-full h-full"
@@ -1039,7 +1029,7 @@ export default function App() {
                      allowFullScreen
                    ></iframe>
                  </div>
-              ) : (
+              ) : visiblePopups[0].type === 'image' && visiblePopups[0].content ? (
                  <div className="relative w-full">
                    {visiblePopups[0].linkUrl ? (
                      <a href={visiblePopups[0].linkUrl} target="_blank" rel="noopener noreferrer">
@@ -1049,7 +1039,7 @@ export default function App() {
                      <img src={`/downloads/${visiblePopups[0].content}`} alt={visiblePopups[0].title} className="w-full h-auto object-contain" />
                    )}
                  </div>
-              )}
+              ) : null}
               {visiblePopups[0].description && (
                 <div className="p-6 bg-white">
                   <h3 className="text-lg font-bold text-gray-900 mb-2">{visiblePopups[0].title}</h3>
@@ -1186,30 +1176,29 @@ export default function App() {
                   
                   {currentPopupForm.type === 'youtube' && (
                     <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2">유튜브 링크 URL</label>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">유튜브 링크 URL (선택사항)</label>
                       <input type="text" value={currentPopupForm.content} onChange={e => setCurrentPopupForm({...currentPopupForm, content: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200" placeholder="https://www.youtube.com/watch?v=..." />
                     </div>
                   )}
 
                   {currentPopupForm.type === 'image' && (
-                    <>
-                      <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-2">이미지 업로드</label>
-                        <input type="file" accept="image/*" onChange={e => setCurrentPopupForm({...currentPopupForm, file: e.target.files ? e.target.files[0] : null})} className="w-full p-2 bg-white border border-gray-200 rounded-xl" />
-                        {popupModalMode === 'edit' && !currentPopupForm.file && <p className="text-xs text-gray-400 mt-2">새 이미지를 선택하지 않으면 기존 이미지가 유지됩니다.</p>}
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-bold text-gray-700 mb-2">클릭 시 이동할 링크 (선택사항)</label>
-                          <input type="text" value={currentPopupForm.linkUrl} onChange={e => setCurrentPopupForm({...currentPopupForm, linkUrl: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200" placeholder="https://..." />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-bold text-gray-700 mb-2">버튼 글자 (선택사항)</label>
-                          <input type="text" value={currentPopupForm.buttonText} onChange={e => setCurrentPopupForm({...currentPopupForm, buttonText: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200" placeholder="예: 자세히 보기" />
-                        </div>
-                      </div>
-                    </>
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">이미지 업로드 (선택사항)</label>
+                      <input type="file" accept="image/*" onChange={e => setCurrentPopupForm({...currentPopupForm, file: e.target.files ? e.target.files[0] : null})} className="w-full p-2 bg-white border border-gray-200 rounded-xl" />
+                      {popupModalMode === 'edit' && !currentPopupForm.file && <p className="text-xs text-gray-400 mt-2">새 이미지를 선택하지 않으면 기존 이미지가 유지됩니다.</p>}
+                    </div>
                   )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">클릭 시 이동할 링크 (선택사항)</label>
+                      <input type="text" value={currentPopupForm.linkUrl} onChange={e => setCurrentPopupForm({...currentPopupForm, linkUrl: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200" placeholder="https://..." />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">버튼 글자 (선택사항)</label>
+                      <input type="text" value={currentPopupForm.buttonText} onChange={e => setCurrentPopupForm({...currentPopupForm, buttonText: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200" placeholder="예: 자세히 보기" />
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
