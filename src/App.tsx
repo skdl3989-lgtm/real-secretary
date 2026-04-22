@@ -476,12 +476,38 @@ export default function App() {
         </div>
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-brand-50 rounded-full blur-3xl -z-10 opacity-70"></div>
 
-        <div className="relative z-10 max-w-5xl mx-auto px-6 text-center pointer-events-none mt-40">
+        <div className="relative z-10 max-w-5xl mx-auto px-6 text-center pointer-events-none mb-20">
           <motion.div 
             variants={revealVariants} 
             initial="hidden" 
             animate="visible"
+            className="flex flex-col items-center gap-12"
           >
+            {/* The gap here is handled by the TextParticleEffect's internal positioning */}
+            <div className="h-[25vh]"></div> 
+            
+            <motion.button
+              initial={{ y: -800, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ 
+                type: "spring",
+                damping: 15,
+                stiffness: 70,
+                delay: 1.5, // Appears after the main text starts settling
+              }}
+              onClick={() => window.location.href = 'https://auth.mycl.io/realms/telas/protocol/openid-connect/auth?client_id=b2b&redirect_uri=https%3A%2F%2Fmycl.io%2F%3Ftenant%3Dincheon&state=b7803258-2719-4d01-a1d0-713cdc7f4511&response_mode=fragment&response_type=code&scope=openid&nonce=bb316bba-03fd-4543-9ca4-2dfd3d0b83d6&code_challenge=2Vzbn3Yi5YcetP1tBRSWGr78aFpnHxuN4m9XB1PTWls&code_challenge_method=S256'}
+              className="pointer-events-auto bg-brand-600 text-white px-12 py-5 rounded-full font-bold text-2xl hover:bg-brand-700 transition-all shadow-2xl shadow-brand-500/40 flex items-center gap-4 group relative overflow-hidden active:scale-95"
+            >
+              <motion.div
+                initial={{ x: '-150%' }}
+                animate={{ x: '150%' }}
+                transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut", repeatDelay: 1.5 }}
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -skew-x-[25deg] pointer-events-none"
+              />
+              <Sparkles className="w-7 h-7 text-blue-100 group-hover:rotate-12 transition-transform" />
+              지금 시작하기
+              <ArrowRight className="w-7 h-7 group-hover:translate-x-1 transition-transform" />
+            </motion.button>
           </motion.div>
         </div>
 
