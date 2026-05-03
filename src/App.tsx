@@ -95,24 +95,8 @@ export default function App() {
     // Fetch Videos
     fetchJson('/api/videos')
       .then(serverData => {
-        const saved = localStorage.getItem('incheon-ai-videos');
-        if (saved) {
-          try {
-            const localData = JSON.parse(saved);
-            if (localData && localData.length > 0 && localData !== serverData) {
-              setVideos(localData);
-              fetch('/api/videos', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(localData),
-              });
-              return;
-            }
-          } catch (e) {
-            console.error(e);
-          }
-        }
         setVideos(serverData);
+        localStorage.setItem('incheon-ai-videos', JSON.stringify(serverData));
       })
       .catch(err => console.error('Failed to load videos:', err));
 
