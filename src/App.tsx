@@ -105,18 +105,32 @@ export default function App() {
         downloadUrl: `https://drive.google.com/uc?export=download&id=${id}`
       };
     }
-    return {
-      thumbnailUrl: url,
-      viewUrl: url,
-      downloadUrl: url
-    };
+    
+    // If it's a valid link but no ID matched, return it as is
+    if (url.startsWith('http')) {
+      return {
+        thumbnailUrl: url,
+        viewUrl: url,
+        downloadUrl: url
+      };
+    }
+    
+    // If it's just a file name (typical for published CSV from Google Forms sheet)
+    return null;
   };
 
   const fetchPracticeData = async () => {
+    let csvUrl = '';
     if (currentPractice === "1번 'AI비서 4컷 만화'") {
+      csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ2wIwSarj3gb9WO-a81JUvrrmO-mWELzBItLnNE3ZlXdHYUgECWsKmWm-TmPr2BUaxP9egH97DZHhu/pub?output=csv';
+    } else if (currentPractice === "2번 'AI 한글 에디터'") {
+      csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRNkP7pP4EcQoR4nFKPIq4jrD655iqjYohEJWqGICgUbnMWT2KA91dKJa340laWXuv6MU3ezhePMzfH/pub?output=csv';
+    }
+
+    if (csvUrl) {
       setIsPracticeLoading(true);
+      setPracticeData([]);
       try {
-        const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ2wIwSarj3gb9WO-a81JUvrrmO-mWELzBItLnNE3ZlXdHYUgECWsKmWm-TmPr2BUaxP9egH97DZHhu/pub?output=csv';
         const response = await fetch(csvUrl);
         const csvText = await response.text();
         
@@ -124,7 +138,7 @@ export default function App() {
           header: true,
           complete: (results) => {
             // Reverse to show newest first
-            setPracticeData(results.data.reverse().filter((row: any) => row['성함']));
+            setPracticeData(results.data.reverse().filter((row: any) => row['성함'] || row['성명']));
             setIsPracticeLoading(false);
           },
           error: (error) => {
@@ -486,7 +500,7 @@ export default function App() {
           <div className="w-20"></div> {/* Spacer */}
         </nav>
         <div className="flex-1 flex flex-col p-4 md:p-8 bg-gray-50 overflow-y-auto">
-          {currentPractice === "1번 'AI비서 4컷 만화'" ? (
+          {(currentPractice === "1번 'AI비서 4컷 만화'" || currentPractice === "2번 'AI 한글 에디터'") ? (
             <div className="max-w-7xl mx-auto w-full">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                 <div>
@@ -494,7 +508,9 @@ export default function App() {
                     <span className="bg-brand-100 text-brand-600 px-3 py-1 rounded-xl text-sm md:text-base">LIVE</span>
                     실습 결과 공유 게시판
                   </h2>
-                  <p className="text-gray-500 font-medium">연수 참여자분들의 창의적인 4컷 만화를 감상해보세요.</p>
+                  <p className="text-gray-500 font-medium">
+                    연수 참여자분들의 {currentPractice === "1번 'AI비서 4컷 만화'" ? "창의적인 4컷 만화" : "멋진 실습 결과"}를 감상해보세요.
+                  </p>
                 </div>
                 <div className="flex items-center gap-3">
                   <button 
@@ -506,13 +522,16 @@ export default function App() {
                     새로고침
                   </button>
                   <a 
-                    href="https://docs.google.com/spreadsheets/d/e/2PACX-1vQ2wIwSarj3gb9WO-a81JUvrrmO-mWELzBItLnNE3ZlXdHYUgECWsKmWm-TmPr2BUaxP9egH97DZHhu/pubhtml" 
+                    href={currentPractice === "1번 'AI비서 4컷 만화'" 
+                      ? "https://docs.google.com/forms/d/e/1FAIpQLSffyRPv2nj58wzGgJld7GAF_U7igNP2RMzfguTnA3aJ-I5yqw/viewform?usp=dialog" 
+                      : "https://docs.google.com/forms/d/e/1FAIpQLSesNscp9hc6E7LJDucXDz7mFXvOIEkI6SbRP2TheJTPwc7aXA/viewform?usp=dialog"
+                    }
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-xl font-bold hover:bg-brand-700 transition-all shadow-md shadow-brand-500/20"
                   >
                     <ExternalLink className="w-4 h-4" />
-                    시트 보기
+                    제출하기
                   </a>
                 </div>
               </div>
@@ -526,10 +545,20 @@ export default function App() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                   {practiceData.length > 0 ? (
                     practiceData.map((row, index) => {
-                      const driveLinks = convertDriveLink(row['이미지를 올려주세요'] || row['이미지 URL'] || '');
+                      let fileUrl = '';
+                      if (currentPractice === "1번 'AI비서 4컷 만화'") {
+                        fileUrl = row['이미지를 올려주세요'] || row['이미지 URL'] || '';
+                      } else {
+                        // Find any key that might hold the file for Practice 2
+                        const fileKey = Object.keys(row).find(k => k.includes('한글') || k.includes('파일') || k.includes('제출'));
+                        fileUrl = fileKey ? row[fileKey] : '';
+                      }
+
+                      const driveLinks = convertDriveLink(fileUrl);
                       const thumbnailUrl = driveLinks?.thumbnailUrl || '';
                       const viewUrl = driveLinks?.viewUrl || '';
                       const downloadUrl = driveLinks?.downloadUrl || '';
+                      const isImage = currentPractice === "1번 'AI비서 4컷 만화'";
                       
                       return (
                         <motion.div 
@@ -539,11 +568,11 @@ export default function App() {
                           transition={{ delay: index * 0.05 }}
                           className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-soft group hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col h-full"
                         >
-                          <div className="aspect-[4/5] bg-gray-50 relative overflow-hidden shrink-0">
+                          <div className={`${isImage ? 'aspect-[4/5]' : 'aspect-video'} bg-gray-50 relative overflow-hidden shrink-0`}>
                             {thumbnailUrl ? (
                               <img 
                                 src={thumbnailUrl} 
-                                alt={`${row['성함']}님의 작품`}
+                                alt={`${row['성함'] || row['성명']}님의 작품`}
                                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                 onError={(e) => {
                                   // Fallback to lh3 googleusercontent if thumbnail endpoint fails
@@ -553,19 +582,33 @@ export default function App() {
                                     if (idMatch && idMatch[0]) {
                                       target.src = `https://lh3.googleusercontent.com/d/${idMatch[0]}`;
                                     } else {
-                                      target.src = 'https://placehold.co/600x800?text=미리보기+없음';
+                                      target.style.display = 'none';
+                                      if (target.nextElementSibling) {
+                                        (target.nextElementSibling as HTMLElement).style.display = 'flex';
+                                      }
                                     }
                                   } else {
-                                    target.src = 'https://placehold.co/600x800?text=미리보기+없음';
+                                    target.style.display = 'none';
+                                    if (target.nextElementSibling) {
+                                      (target.nextElementSibling as HTMLElement).style.display = 'flex';
+                                    }
                                   }
                                 }}
                               />
-                            ) : (
-                              <div className="w-full h-full flex flex-col items-center justify-center text-gray-300 gap-4 p-8 text-center">
-                                <FileText className="w-12 h-12" />
-                                <p className="text-sm font-medium">등록된 이미지가 없습니다.</p>
+                            ) : null}
+                            
+                            <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 gap-3 p-8 text-center bg-blue-50/50" style={{ display: thumbnailUrl ? 'none' : 'flex' }}>
+                              <FileText className={`text-blue-300 ${isImage ? 'w-12 h-12' : 'w-16 h-16'}`} />
+                              <div className="space-y-1">
+                                <p className="text-sm font-bold text-blue-600/80">
+                                  {fileUrl ? (!fileUrl.startsWith('http') ? fileUrl : '제출 완료') : '미제출'}
+                                </p>
+                                {fileUrl && !fileUrl.startsWith('http') && (
+                                  <p className="text-[10px] text-blue-500/60 font-medium px-2">(파일 링크는 보안상 제공되지 않습니다)</p>
+                                )}
                               </div>
-                            )}
+                            </div>
+
                             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
                               {viewUrl && (
                                 <a 
@@ -581,7 +624,9 @@ export default function App() {
                               {downloadUrl && (
                                 <a 
                                   href={downloadUrl} 
-                                  download={`AI비서_4컷만화_${row['성함']}.png`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  download={isImage ? `AI비서_4컷만화_${row['성함']}.png` : `AI비서_한글에디터_${row['성명']}.hwp`}
                                   className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-gray-800 shadow-lg hover:bg-gray-50 transition-colors"
                                   title="다운로드"
                                 >
@@ -595,11 +640,11 @@ export default function App() {
                               <div className="flex flex-col">
                                 <div className="flex items-center gap-2 mb-1">
                                   <User className="w-4 h-4 text-brand-500" />
-                                  <h4 className="font-bold text-gray-900">{row['성함'] || '익명'}</h4>
+                                  <h4 className="font-bold text-gray-900">{row['성함'] || row['성명'] || '익명'}</h4>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <School className="w-4 h-4 text-gray-400" />
-                                  <p className="text-sm text-gray-500 font-medium">{row['소속 학교'] || '학교 정보 없음'}</p>
+                                  <p className="text-sm text-gray-500 font-medium">{row['소속 학교'] || row['학교'] || '학교 정보 없음'}</p>
                                 </div>
                               </div>
                               <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400">
@@ -1159,6 +1204,27 @@ export default function App() {
                 AI 비서와 함께하는 즐거운 일상을 4컷 만화로 구성해보는 실습입니다.
               </p>
               <div className="mt-auto flex items-center gap-2 text-brand-600 font-bold group-hover:gap-4 transition-all">
+                실습 시작하기
+                <ArrowRight className="w-5 h-5" />
+              </div>
+            </motion.div>
+
+            <motion.div 
+              variants={revealVariants} 
+              initial="hidden" 
+              whileInView="visible" 
+              viewport={{ once: true, amount: 0.15 }}
+              onClick={() => setCurrentPractice("2번 'AI 한글 에디터'")}
+              className="bg-white rounded-[2rem] p-8 border border-gray-100 hover:border-brand-500 hover:shadow-soft transition-all duration-300 group cursor-pointer flex flex-col h-full"
+            >
+              <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-8 group-hover:bg-blue-600 group-hover:text-white transition-all duration-300">
+                <FileText className="w-8 h-8" />
+              </div>
+              <h3 className="text-2xl font-bold mb-4">2번 'AI 한글 에디터'</h3>
+              <p className="text-gray-500 leading-relaxed font-medium mb-6">
+                AI 한글 에디터를 활용하여 내 업무에 필요한 문서를 쉽고 빠르게 작성하는 실습입니다.
+              </p>
+              <div className="mt-auto flex items-center gap-2 text-blue-600 font-bold group-hover:gap-4 transition-all">
                 실습 시작하기
                 <ArrowRight className="w-5 h-5" />
               </div>
