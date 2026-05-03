@@ -15,9 +15,18 @@ import {
   Sparkles,
   Trash2,
   X,
-  Youtube
+  Youtube,
+  LayoutGrid,
+  School,
+  User,
+  ExternalLink,
+  Loader2,
+  Search,
+  RefreshCcw,
+  ChevronRight
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import Papa from 'papaparse';
 import TextParticleEffect from './components/TextParticleEffect';
 
 const revealVariants = {
@@ -79,6 +88,62 @@ export default function App() {
   const [currentPopupForm, setCurrentPopupForm] = useState<{title: string, description: string, type: 'image' | 'youtube', content: string, linkUrl: string, buttonText: string, isActive: boolean, file: File | null}>({ title: '', description: '', type: 'image', content: '', linkUrl: '', buttonText: '', isActive: true, file: null });
   const [editingPopupId, setEditingPopupId] = useState<number | null>(null);
   const [deletingPopupId, setDeletingPopupId] = useState<number | null>(null);
+  const [currentPractice, setCurrentPractice] = useState<string | null>(null);
+  const [practiceData, setPracticeData] = useState<any[]>([]);
+  const [isPracticeLoading, setIsPracticeLoading] = useState(false);
+
+  const convertDriveLink = (url: string) => {
+    if (!url) return null;
+    const idMatch = url.match(/[-\w]{25,}/);
+    if (idMatch && idMatch[0]) {
+      const id = idMatch[0];
+      return {
+        // Thumbnail endpoint usually works better for embedding preview images directly
+        thumbnailUrl: `https://drive.google.com/thumbnail?id=${id}&sz=w800`,
+        // Or lh3 which works explicitly for images: `https://lh3.googleusercontent.com/d/${id}`
+        viewUrl: `https://drive.google.com/file/d/${id}/view`,
+        downloadUrl: `https://drive.google.com/uc?export=download&id=${id}`
+      };
+    }
+    return {
+      thumbnailUrl: url,
+      viewUrl: url,
+      downloadUrl: url
+    };
+  };
+
+  const fetchPracticeData = async () => {
+    if (currentPractice === "1번 'AI비서 4컷 만화'") {
+      setIsPracticeLoading(true);
+      try {
+        const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ2wIwSarj3gb9WO-a81JUvrrmO-mWELzBItLnNE3ZlXdHYUgECWsKmWm-TmPr2BUaxP9egH97DZHhu/pub?output=csv';
+        const response = await fetch(csvUrl);
+        const csvText = await response.text();
+        
+        Papa.parse(csvText, {
+          header: true,
+          complete: (results) => {
+            // Reverse to show newest first
+            setPracticeData(results.data.reverse().filter((row: any) => row['성함']));
+            setIsPracticeLoading(false);
+          },
+          error: (error) => {
+            console.error('CSV Parsing Error:', error);
+            setIsPracticeLoading(false);
+          }
+        });
+      } catch (error) {
+        console.error('Fetch Error:', error);
+        setIsPracticeLoading(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (currentPractice) {
+      fetchPracticeData();
+    }
+  }, [currentPractice]);
 
   // Fetch videos, documents, and popups from server
   useEffect(() => {
@@ -403,6 +468,182 @@ export default function App() {
     setVisiblePopups(prev => prev.filter(p => p.id !== id));
   };
 
+
+  if (currentPractice) {
+    return (
+      <div className="min-h-screen bg-white flex flex-col">
+        <nav className="h-20 border-b border-gray-100 flex items-center px-6 justify-between bg-white sticky top-0 z-50">
+          <button 
+            onClick={() => setCurrentPractice(null)}
+            className="flex items-center gap-2 text-gray-600 hover:text-brand-600 font-bold transition-colors cursor-pointer"
+          >
+            <ArrowRight className="w-5 h-5 rotate-180" />
+            돌아가기
+          </button>
+          <h1 className="text-xl font-bold bg-gradient-to-r from-brand-600 to-brand-400 bg-clip-text text-transparent">
+            {currentPractice}
+          </h1>
+          <div className="w-20"></div> {/* Spacer */}
+        </nav>
+        <div className="flex-1 flex flex-col p-4 md:p-8 bg-gray-50 overflow-y-auto">
+          {currentPractice === "1번 'AI비서 4컷 만화'" ? (
+            <div className="max-w-7xl mx-auto w-full">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                <div>
+                  <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
+                    <span className="bg-brand-100 text-brand-600 px-3 py-1 rounded-xl text-sm md:text-base">LIVE</span>
+                    실습 결과 공유 게시판
+                  </h2>
+                  <p className="text-gray-500 font-medium">연수 참여자분들의 창의적인 4컷 만화를 감상해보세요.</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={fetchPracticeData}
+                    disabled={isPracticeLoading}
+                    className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl font-bold text-gray-600 hover:text-brand-600 hover:border-brand-200 transition-all shadow-sm disabled:opacity-50"
+                  >
+                    <RefreshCcw className={`w-4 h-4 ${isPracticeLoading ? 'animate-spin' : ''}`} />
+                    새로고침
+                  </button>
+                  <a 
+                    href="https://docs.google.com/spreadsheets/d/e/2PACX-1vQ2wIwSarj3gb9WO-a81JUvrrmO-mWELzBItLnNE3ZlXdHYUgECWsKmWm-TmPr2BUaxP9egH97DZHhu/pubhtml" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-xl font-bold hover:bg-brand-700 transition-all shadow-md shadow-brand-500/20"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    시트 보기
+                  </a>
+                </div>
+              </div>
+
+              {isPracticeLoading && practiceData.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-gray-100 shadow-soft">
+                  <Loader2 className="w-10 h-10 text-brand-500 animate-spin mb-4" />
+                  <p className="text-gray-500 font-bold">실습 데이터를 불러오는 중입니다...</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {practiceData.length > 0 ? (
+                    practiceData.map((row, index) => {
+                      const driveLinks = convertDriveLink(row['이미지를 올려주세요'] || row['이미지 URL'] || '');
+                      const thumbnailUrl = driveLinks?.thumbnailUrl || '';
+                      const viewUrl = driveLinks?.viewUrl || '';
+                      const downloadUrl = driveLinks?.downloadUrl || '';
+                      
+                      return (
+                        <motion.div 
+                          key={index}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: index * 0.05 }}
+                          className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-soft group hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col h-full"
+                        >
+                          <div className="aspect-[4/5] bg-gray-50 relative overflow-hidden shrink-0">
+                            {thumbnailUrl ? (
+                              <img 
+                                src={thumbnailUrl} 
+                                alt={`${row['성함']}님의 작품`}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                onError={(e) => {
+                                  // Fallback to lh3 googleusercontent if thumbnail endpoint fails
+                                  const target = e.target as HTMLImageElement;
+                                  if (!target.src.includes('lh3.googleusercontent')) {
+                                    const idMatch = viewUrl.match(/[-\w]{25,}/);
+                                    if (idMatch && idMatch[0]) {
+                                      target.src = `https://lh3.googleusercontent.com/d/${idMatch[0]}`;
+                                    } else {
+                                      target.src = 'https://placehold.co/600x800?text=미리보기+없음';
+                                    }
+                                  } else {
+                                    target.src = 'https://placehold.co/600x800?text=미리보기+없음';
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center text-gray-300 gap-4 p-8 text-center">
+                                <FileText className="w-12 h-12" />
+                                <p className="text-sm font-medium">등록된 이미지가 없습니다.</p>
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                              {viewUrl && (
+                                <a 
+                                  href={viewUrl} 
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-brand-600 shadow-lg hover:bg-brand-50 transition-colors"
+                                  title="크게 보기"
+                                >
+                                  <Search className="w-5 h-5" />
+                                </a>
+                              )}
+                              {downloadUrl && (
+                                <a 
+                                  href={downloadUrl} 
+                                  download={`AI비서_4컷만화_${row['성함']}.png`}
+                                  className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-gray-800 shadow-lg hover:bg-gray-50 transition-colors"
+                                  title="다운로드"
+                                >
+                                  <Download className="w-5 h-5" />
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                          <div className="p-6 flex-1 flex flex-col justify-between">
+                            <div className="flex items-center justify-between mb-4">
+                              <div className="flex flex-col">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <User className="w-4 h-4 text-brand-500" />
+                                  <h4 className="font-bold text-gray-900">{row['성함'] || '익명'}</h4>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <School className="w-4 h-4 text-gray-400" />
+                                  <p className="text-sm text-gray-500 font-medium">{row['소속 학교'] || '학교 정보 없음'}</p>
+                                </div>
+                              </div>
+                              <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400">
+                                <Sparkles className="w-4 h-4 opacity-50" />
+                              </div>
+                            </div>
+                            <div className="text-[11px] text-gray-400 font-mono mt-2">
+                              {row['타임스탬프'] || ''}
+                            </div>
+                          </div>
+                        </motion.div>
+                      );
+                    })
+                  ) : (
+                    <div className="col-span-full py-20 flex flex-col items-center justify-center bg-white rounded-3xl border border-gray-100 shadow-soft">
+                      <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center text-gray-300 mb-6">
+                        <LayoutGrid className="w-10 h-10" />
+                      </div>
+                      <p className="text-gray-500 font-bold">아직 등록된 실습 결과가 없습니다.</p>
+                      <p className="text-gray-400 text-sm mt-2 font-medium">첫 번째 작품의 주인공이 되어보세요!</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex-1 flex items-center justify-center">
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-center"
+              >
+                <div className="w-24 h-24 bg-brand-50 text-brand-500 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-inner">
+                  <Sparkles className="w-12 h-12" />
+                </div>
+                <h2 className="text-3xl font-bold text-gray-900 mb-4">현재 준비 중인 실습입니다.</h2>
+                <p className="text-gray-500 text-lg">조금만 기다려주시면 멋진 실습 도구로 찾아뵐게요!</p>
+              </motion.div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-gray-50 text-gray-900 antialiased selection:bg-brand-100 selection:text-brand-700 font-sans">
@@ -884,6 +1125,45 @@ export default function App() {
               {import.meta.env.DEV && <p className="text-gray-400">자료 추가하기 버튼을 눌러 새 자료를 업로드해보세요.</p>}
             </div>
           )}
+        </div>
+      </section>
+
+      {/* Practice Board Section */}
+      <section id="practice-board" className="py-24 bg-gray-50">
+        <div className="max-w-6xl mx-auto px-6">
+          <motion.div 
+            variants={revealVariants} 
+            initial="hidden" 
+            whileInView="visible" 
+            viewport={{ once: true, amount: 0.15 }}
+            className="text-center mb-16"
+          >
+            <h2 className="text-3xl md:text-5xl font-bold mb-6 tracking-tight">실습 게시판</h2>
+            <p className="text-xl text-gray-500 font-medium">연수에서 배운 내용을 직접 실습해보세요.</p>
+          </motion.div>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            <motion.div 
+              variants={revealVariants} 
+              initial="hidden" 
+              whileInView="visible" 
+              viewport={{ once: true, amount: 0.15 }}
+              onClick={() => setCurrentPractice("1번 'AI비서 4컷 만화'")}
+              className="bg-white rounded-[2rem] p-8 border border-gray-100 hover:border-brand-500 hover:shadow-soft transition-all duration-300 group cursor-pointer flex flex-col h-full"
+            >
+              <div className="w-16 h-16 bg-brand-50 text-brand-600 rounded-2xl flex items-center justify-center mb-8 group-hover:bg-brand-600 group-hover:text-white transition-all duration-300">
+                <LayoutGrid className="w-8 h-8" />
+              </div>
+              <h3 className="text-2xl font-bold mb-4">1번 'AI비서 4컷 만화'</h3>
+              <p className="text-gray-500 leading-relaxed font-medium mb-6">
+                AI 비서와 함께하는 즐거운 일상을 4컷 만화로 구성해보는 실습입니다.
+              </p>
+              <div className="mt-auto flex items-center gap-2 text-brand-600 font-bold group-hover:gap-4 transition-all">
+                실습 시작하기
+                <ArrowRight className="w-5 h-5" />
+              </div>
+            </motion.div>
+          </div>
         </div>
       </section>
 
