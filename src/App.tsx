@@ -171,42 +171,52 @@ export default function App() {
       return res.json();
     };
 
-    // Fetch Videos
-    fetchJson('/api/videos')
-      .then(serverData => {
-        setVideos(serverData);
-        localStorage.setItem('incheon-ai-videos', JSON.stringify(serverData));
-      })
-      .catch(err => console.error('Failed to load videos:', err));
+    // Load data from LocalStorage first, fallback to server if empty
+    const loadData = async (key: string, url: string, setter: Function, processCallback?: Function) => {
+      const localData = localStorage.getItem(key);
+      if (localData) {
+        try {
+          const parsed = JSON.parse(localData);
+          setter(parsed);
+          if (processCallback) processCallback(parsed);
+          return;
+        } catch (e) {
+          console.error(`Failed to parse local ${key}, falling back to server`);
+        }
+      }
 
-    // Fetch Documents
-    fetchJson('/api/documents')
-      .then(serverData => setDocuments(serverData))
-      .catch(err => console.error('Failed to load documents:', err));
+      try {
+        const serverData = await fetchJson(url);
+        setter(serverData);
+        // Save initial default data to LocalStorage so it persists modifications later
+        localStorage.setItem(key, JSON.stringify(serverData));
+        if (processCallback) processCallback(serverData);
+      } catch (err) {
+        console.error(`Failed to load ${key}:`, err);
+      }
+    };
 
-    // Fetch Popups
-    fetchJson('/api/popups')
-      .then(serverData => {
-        setPopups(serverData);
-        
-        // Filter active popups and check local storage for "don't show today"
-        const activePopups = serverData.filter((p: PopupContent) => {
-          if (!p.isActive) return false;
-          const hideUntil = localStorage.getItem(`hide_popup_${p.id}`);
-          if (hideUntil && parseInt(hideUntil) > Date.now()) {
-            return false;
-          }
-          return true;
-        });
-        setVisiblePopups(activePopups);
-      })
-      .catch(err => console.error('Failed to load popups:', err));
+    loadData('incheon_ai_videos_data', '/api/videos', setVideos);
+    loadData('incheon_ai_documents_data', '/api/documents', setDocuments);
+    
+    // For Popups, we need extra logic to handle active visibility
+    loadData('incheon_ai_popups_data', '/api/popups', setPopups, (popupsData: PopupContent[]) => {
+      const activePopups = popupsData.filter((p) => {
+        if (!p.isActive) return false;
+        const hideUntil = localStorage.getItem(`hide_popup_${p.id}`);
+        if (hideUntil && parseInt(hideUntil) > Date.now()) {
+          return false;
+        }
+        return true;
+      });
+      setVisiblePopups(activePopups);
+    });
   }, []);
 
-  // Save to server
+  // Save to server & LocalStorage (For persistence without External DB)
   const saveToBackend = (newVideos: VideoContent[]) => {
     setVideos(newVideos);
-    localStorage.setItem('incheon-ai-videos', JSON.stringify(newVideos));
+    localStorage.setItem('incheon_ai_videos_data', JSON.stringify(newVideos));
     
     fetch('/api/videos', {
       method: 'POST',
@@ -217,6 +227,8 @@ export default function App() {
 
   const saveDocsToBackend = (newDocuments: DocumentContent[]) => {
     setDocuments(newDocuments);
+    localStorage.setItem('incheon_ai_documents_data', JSON.stringify(newDocuments));
+
     fetch('/api/documents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -370,11 +382,24 @@ export default function App() {
   // Popup Management Handlers
   const savePopupsToBackend = (newPopups: PopupContent[]) => {
     setPopups(newPopups);
+    localStorage.setItem('incheon_ai_popups_data', JSON.stringify(newPopups));
+    
     fetch('/api/popups', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newPopups),
     }).catch(err => console.error('Failed to save popups:', err));
+
+    // Re-evaluate visible popups based on the newly saved data
+    const activePopups = newPopups.filter((p) => {
+      if (!p.isActive) return false;
+      const hideUntil = localStorage.getItem(`hide_popup_${p.id}`);
+      if (hideUntil && parseInt(hideUntil) > Date.now()) {
+        return false;
+      }
+      return true;
+    });
+    setVisiblePopups(activePopups);
   };
 
   const openPopupManager = () => {
